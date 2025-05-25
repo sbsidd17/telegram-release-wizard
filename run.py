@@ -1,7 +1,6 @@
-
 #!/usr/bin/env python3
 """
-Simple runner script for the Telegram bot
+Simple runner script for the Telegram bot and Flask app.
 """
 import asyncio
 import sys
@@ -9,6 +8,12 @@ import logging
 import signal
 from bot import TelegramBot
 from config import BotConfig
+from threading import Thread
+from app import app
+
+def start_flask():
+    """Start the Flask app"""
+    app.run(host='0.0.0.0', port=5000)
 
 def setup_logging():
     """Setup logging configuration"""
@@ -36,9 +41,9 @@ async def main():
     setup_logging()
     logger = logging.getLogger(__name__)
     
-    # Setup signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # Start Flask app in a separate thread
+    flask_thread = Thread(target=start_flask)
+    flask_thread.start()
     
     try:
         # Load and validate configuration
