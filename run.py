@@ -6,6 +6,7 @@ Simple runner script for the Telegram bot
 import asyncio
 import sys
 import logging
+import signal
 from bot import TelegramBot
 from config import BotConfig
 
@@ -19,11 +20,25 @@ def setup_logging():
             logging.StreamHandler(sys.stdout)
         ]
     )
+    
+    # Reduce noise from aiohttp and other libraries
+    logging.getLogger('aiohttp').setLevel(logging.WARNING)
+    logging.getLogger('telethon').setLevel(logging.WARNING)
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger = logging.getLogger(__name__)
+    logger.info("Received shutdown signal, stopping bot...")
+    sys.exit(0)
 
 async def main():
     """Main entry point"""
     setup_logging()
     logger = logging.getLogger(__name__)
+    
+    # Setup signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     try:
         # Load and validate configuration

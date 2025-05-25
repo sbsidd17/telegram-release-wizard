@@ -42,8 +42,12 @@ class TelegramBot:
 
     async def start(self):
         """Start the bot"""
-        await self.client.start(bot_token=self.bot_token)
-        logger.info("Bot started successfully")
+        try:
+            await self.client.start(bot_token=self.bot_token)
+            logger.info("Bot started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start bot: {e}")
+            raise
         
         @self.client.on(events.NewMessage(pattern='/start'))
         async def start_handler(event):
@@ -98,30 +102,48 @@ class TelegramBot:
                 return
 
             try:
+                # Handle file uploads
                 if event.message.document:
                     await self.handle_file_upload(event)
-                elif event.message.text and self.is_url(event.message.text.strip()):
-                    await self.handle_url_upload(event)
-                elif event.message.text:
-                    # Only respond with help message for actual text messages (not empty)
+                    return
+                
+                # Handle URL messages
+                if event.message.text:
                     text = event.message.text.strip()
-                    if text:  # Only if there's actual content
+                    if self.is_url(text):
+                        await self.handle_url_upload(event)
+                        return
+                    
+                    # Only respond to non-empty text that's not a URL or command
+                    if text and not text.startswith('/'):
                         await event.respond(
-                            "Please send a file or a valid URL.\n\n"
-                            "Use /help to see available commands."
+                            "❓ **Invalid Input**\n\n"
+                            "Please send:\n"
+                            "• A file (drag & drop or attach)\n"
+                            "• A direct download URL\n\n"
+                            "Use /help for more information."
                         )
-                # For other message types (stickers, photos without documents, etc.), do nothing
+                
+                # Ignore other message types (stickers, photos without documents, etc.)
+                
             except Exception as e:
-                logger.error(f"Error handling message: {e}")
-                await event.respond(f"❌ Error: {str(e)}")
+                logger.error(f"Error handling message from user {user_id}: {e}")
+                await event.respond(f"❌ **Error**\n\nSomething went wrong: {str(e)}")
                 if user_id in self.active_uploads:
                     del self.active_uploads[user_id]
 
-        await self.client.run_until_disconnected()
+        try:
+            await self.client.run_until_disconnected()
+        except KeyboardInterrupt:
+            logger.info("Bot stopped by user")
+        except Exception as e:
+            logger.error(f"Bot disconnected with error: {e}")
 
     def is_url(self, text: str) -> bool:
         """Check if text is a valid URL"""
-        return text.startswith(('http://', 'https://'))
+        if not text:
+            return False
+        return text.startswith(('http://', 'https://')) and len(text) > 8
 
     async def handle_file_upload(self, event):
         """Handle file upload from Telegram"""
