@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 import os
@@ -57,6 +56,7 @@ class TelegramBot:
                 "• /help - Show this message\n"
                 "• /status - Check upload status"
             )
+            raise events.StopPropagation
 
         @self.client.on(events.NewMessage(pattern='/help'))
         async def help_handler(event):
@@ -72,6 +72,7 @@ class TelegramBot:
                 f"**Target Repository:** `{self.github_repo}`\n"
                 f"**Release Tag:** `{self.github_release_tag}`"
             )
+            raise events.StopPropagation
 
         @self.client.on(events.NewMessage(pattern='/status'))
         async def status_handler(event):
@@ -81,11 +82,13 @@ class TelegramBot:
                 await event.respond(f"📊 Active upload: {upload_info['filename']} - {upload_info['status']}")
             else:
                 await event.respond("No active uploads")
+            raise events.StopPropagation
 
         @self.client.on(events.NewMessage)
         async def message_handler(event):
+            # Skip if it's a command (already handled by specific handlers)
             if event.message.text and event.message.text.startswith('/'):
-                return  # Skip commands
+                return
             
             user_id = event.sender_id
             
@@ -97,10 +100,17 @@ class TelegramBot:
             try:
                 if event.message.document:
                     await self.handle_file_upload(event)
-                elif event.message.text and self.is_url(event.message.text):
+                elif event.message.text and self.is_url(event.message.text.strip()):
                     await self.handle_url_upload(event)
-                else:
-                    await event.respond("Please send a file or a valid URL")
+                elif event.message.text:
+                    # Only respond with help message for actual text messages (not empty)
+                    text = event.message.text.strip()
+                    if text:  # Only if there's actual content
+                        await event.respond(
+                            "Please send a file or a valid URL.\n\n"
+                            "Use /help to see available commands."
+                        )
+                # For other message types (stickers, photos without documents, etc.), do nothing
             except Exception as e:
                 logger.error(f"Error handling message: {e}")
                 await event.respond(f"❌ Error: {str(e)}")
