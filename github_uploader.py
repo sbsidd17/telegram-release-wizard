@@ -3,6 +3,7 @@ import aiohttp
 import logging
 from typing import Callable, Optional
 import json
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -75,36 +76,45 @@ class GitHubUploader:
                 "Content-Length": str(len(file_data))
             }
             
-            # Upload with progress tracking
-            async with aiohttp.ClientSession() as session:
-                uploaded = 0
-                chunk_size = 1024 * 1024  # 1MB chunks
+            # Create a custom data reader that tracks progress
+            class ProgressData:
+                def __init__(self, data: bytes, callback: Optional[Callable] = None):
+                    self.data = data
+                    self.callback = callback
+                    self.total_size = len(data)
+                    self.uploaded = 0
                 
-                class ProgressReader:
-                    def __init__(self, data: bytes, callback: Optional[Callable] = None):
-                        self.data = data
-                        self.callback = callback
-                        self.position = 0
+                async def read(self, size: int = 8192) -> bytes:
+                    if self.uploaded >= self.total_size:
+                        return b''
                     
-                    def read(self, size: int = -1) -> bytes:
-                        if size == -1:
-                            chunk = self.data[self.position:]
-                            self.position = len(self.data)
-                        else:
-                            chunk = self.data[self.position:self.position + size]
-                            self.position += len(chunk)
-                        
-                        if self.callback and chunk:
-                            self.callback(self.position)
-                        
-                        return chunk
+                    chunk_size = min(size, self.total_size - self.uploaded)
+                    chunk = self.data[self.uploaded:self.uploaded + chunk_size]
+                    self.uploaded += len(chunk)
                     
-                    def __len__(self):
-                        return len(self.data)
+                    if self.callback and chunk:
+                        self.callback(self.uploaded)
+                    
+                    return chunk
 
-                progress_reader = ProgressReader(file_data, progress_callback)
-                
-                async with session.post(upload_url, headers=headers, data=progress_reader) as response:
+            # Upload with progress tracking using chunked approach
+            async with aiohttp.ClientSession() as session:
+                # For aiohttp, we need to use a generator or async iterator
+                async def data_generator():
+                    chunk_size = 1024 * 1024  # 1MB chunks
+                    uploaded = 0
+                    
+                    while uploaded < len(file_data):
+                        chunk_end = min(uploaded + chunk_size, len(file_data))
+                        chunk = file_data[uploaded:chunk_end]
+                        uploaded += len(chunk)
+                        
+                        if progress_callback:
+                            progress_callback(uploaded)
+                        
+                        yield chunk
+
+                async with session.post(upload_url, headers=headers, data=data_generator()) as response:
                     if response.status not in [200, 201]:
                         error_text = await response.text()
                         raise Exception(f"Failed to upload asset: HTTP {response.status} - {error_text}")
