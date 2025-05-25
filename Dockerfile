@@ -1,4 +1,3 @@
-
 FROM python:3.11-slim
 
 # Set working directory
@@ -25,5 +24,5 @@ RUN mkdir -p /app/sessions
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 USER botuser
 
-# Run the bot
-CMD gunicorn app:app & python3 bot.py
+# Run the application
+CMD ["python3", "run.py"]
