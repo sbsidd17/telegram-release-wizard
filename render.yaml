@@ -18,4 +18,8 @@ services:
         sync: false
       - key: GITHUB_RELEASE_TAG
         sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: PORT
+        sync: false
     autoDeploy: false
