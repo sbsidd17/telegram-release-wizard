@@ -1,0 +1,21 @@
+services:
+  - type: web
+    plan: free
+    name: Free Storage v1
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    repo: https://github.com/sbsidd17/telegram-release-wizard    
+    branch: main
+    envVars:
+      - key: TELEGRAM_API_ID 
+        sync: false
+      - key: TELEGRAM_API_HASH 
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_RELEASE_TAG
+        sync: false
+    autoDeploy: false
