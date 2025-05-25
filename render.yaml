@@ -4,7 +4,7 @@ services:
     name: Free Storage v1
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: python bot.py
     repo: https://github.com/sbsidd17/telegram-release-wizard    
     branch: main
     envVars:
