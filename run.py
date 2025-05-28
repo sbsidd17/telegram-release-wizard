@@ -6,27 +6,15 @@ import asyncio
 import sys
 import logging
 import signal
-import os
 from bot import TelegramBot
 from config import BotConfig
+from threading import Thread
 from app import app
-import gunicorn.app.base
-from gunicorn import config
 
-class StandaloneApplication(gunicorn.app.base.BaseApplication):
-    """Custom Gunicorn application"""
-    def __init__(self, app, options=None):
-        self.options = options or {}
-        self.application = app
-        super().__init__()
-
-    def load_config(self):
-        cfg = config.Config()
-        for key, value in self.options.items():
-            cfg.set(key.lower(), value)
-
-    def load(self):
-        return self.application
+def start_flask():
+    """Start the Flask app using Gunicorn"""
+    # This function is not needed for Gunicorn; Gunicorn will handle this
+    pass
 
 def setup_logging():
     """Setup logging configuration"""
@@ -38,72 +26,24 @@ def setup_logging():
             logging.StreamHandler(sys.stdout)
         ]
     )
+    
+    # Reduce noise from aiohttp and other libraries
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telethon').setLevel(logging.WARNING)
-    logging.getLogger('gunicorn').setLevel(logging.DEBUG)
 
-def signal_handler(signum, frame, loop, bot):
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
     logger = logging.getLogger(__name__)
     logger.info("Received shutdown signal, stopping bot...")
-    
-    tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task()]
-    for task in tasks:
-        task.cancel()
-    
-    async def cleanup():
-        try:
-            await bot.client.disconnect()
-            await loop.shutdown_asyncgens()
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
-    
-    try:
-        future = asyncio.ensure_future(cleanup(), loop=loop)
-        loop.run_until_complete(future)
-    except RuntimeError as e:
-        logger.error(f"Error running cleanup: {e}")
-    
-    try:
-        loop.stop()
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
-    except Exception as e:
-        logger.error(f"Error closing loop: {e}")
     sys.exit(0)
 
-async def start_flask():
-    logger = logging.getLogger(__name__)
-    port = int(os.environ.get("PORT", 5000))
-    logger.info(f"Starting Gunicorn server on 0.0.0.0:{port}...")
-    options = {
-        'bind': f'0.0.0.0:{port}',
-        'workers': 1,
-        'worker_class': 'sync',
-        'threads': 1,
-        'loglevel': 'debug',
-        'accesslog': '-',
-        'errorlog': '-',
-        'timeout': 30,
-        'graceful_timeout': 15,
-        'keepalive': 2,
-        'preload_app': True,
-    }
-    gunicorn_app = StandaloneApplication(app, options)
-    
-    loop = asyncio.get_event_loop()
-    task = loop.run_in_executor(None, gunicorn_app.run)
-    await asyncio.sleep(5)
-    logger.info(f"Gunicorn server started on 0.0.0.0:{port}")
-    return task
-
 async def main():
+    """Main entry point"""
     setup_logging()
     logger = logging.getLogger(__name__)
-    loop = asyncio.get_event_loop()
-    
-    bot = TelegramBot()
     
     try:
+        # Load and validate configuration
         config = BotConfig.from_env()
         config.validate()
         
@@ -111,7 +51,8 @@ async def main():
         logger.info(f"Target repository: {config.github_repo}")
         logger.info(f"Release tag: {config.github_release_tag}")
         
-        flask_task = await start_flask()
+        # Start the bot
+        bot = TelegramBot()
         await bot.start()
         
     except ValueError as e:
@@ -122,27 +63,7 @@ async def main():
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         sys.exit(1)
-    finally:
-        if 'flask_task' in locals():
-            flask_task.cancel()
-        if 'bot' in locals():
-            try:
-                await bot.client.disconnect()
-            except Exception as e:
-                logger.error(f"Error disconnecting bot: {e}")
-        try:
-            await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            pass
 
-if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    bot = TelegramBot()
-    
-    signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, loop, bot))
-    signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s, f, loop, bot))
-    
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        pass
+if __name__ == "__main__":
+    # Run the bot with Gunicorn, Flask will be handled by Gunicorn
+    asyncio.run(main())
