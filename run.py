@@ -1,4 +1,4 @@
-l#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Simple runner script for the Telegram bot and Flask app.
 """
