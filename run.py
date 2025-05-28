@@ -1,11 +1,11 @@
+# Update the run.py file to use Gunicorn
+
 #!/usr/bin/env python3
 """
-Simple runner script for the Telegram bot.
+Simple runner script for the Telegram bot and Flask app.
 """
-import asyncio
 import sys
 import logging
-import signal
 from bot import TelegramBot
 from config import BotConfig
 
@@ -23,12 +23,6 @@ def setup_logging():
     # Reduce noise from aiohttp and other libraries
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telethon').setLevel(logging.WARNING)
-
-def signal_handler(signum, frame):
-    """Handle shutdown signals gracefully"""
-    logger = logging.getLogger(__name__)
-    logger.info("Received shutdown signal, stopping bot...")
-    sys.exit(0)
 
 async def main():
     """Main entry point"""
@@ -58,4 +52,8 @@ async def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Gunicorn will handle running the app
+    import os
+    os.environ['GUNICORN_CMD_ARGS'] = '--bind=0.0.0.0:5000'
+    from gunicorn.app.wsgiapp import run
+    run()
