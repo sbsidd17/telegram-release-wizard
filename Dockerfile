@@ -24,5 +24,8 @@ RUN mkdir -p /app/sessions
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 USER botuser
 
+# Expose port 5000 for Koyeb health checks
+EXPOSE 5000
+
 # Run the application
 CMD ["python3", "run.py"]
