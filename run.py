@@ -62,7 +62,7 @@ async def start_flask():
         'timeout': 120,    # Timeout for Koyeb compatibility
         'graceful_timeout': 30,  # Allow time for connections to close
         'keepalive': 5,  # Keep connections alive for health checks
-        'preload': True,  # Preload app to reduce startup time
+        'preload_app': True,  # Corrected from 'preload' to preload app before forking
     }
     gunicorn_app = StandaloneApplication(app, options)
     
