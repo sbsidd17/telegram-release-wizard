@@ -8,11 +8,9 @@ import logging
 import signal
 from bot import TelegramBot
 from config import BotConfig
-from threading import Thread
 from app import app
 import gunicorn.app.base
 from gunicorn import config
-from gunicorn.arbiter import Arbiter
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
     """Custom Gunicorn application"""
@@ -29,17 +27,6 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
     def load(self):
         return self.application
 
-def start_flask():
-    """Start the Flask app with Gunicorn"""
-    options = {
-        'bind': '0.0.0.0:5000',
-        'workers': 2,  # Adjust based on your needs
-        'loglevel': 'info',
-        'accesslog': '-',  # Log to stdout
-        'errorlog': '-',   # Log to stdout
-    }
-    StandaloneApplication(app, options).run()
-
 def setup_logging():
     """Setup logging configuration"""
     logging.basicConfig(
@@ -54,6 +41,7 @@ def setup_logging():
     # Reduce noise from aiohttp and other libraries
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telethon').setLevel(logging.WARNING)
+    logging.getLogger('gunicorn').setLevel(logging.INFO)
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
@@ -61,14 +49,29 @@ def signal_handler(signum, frame):
     logger.info("Received shutdown signal, stopping bot...")
     sys.exit(0)
 
+async def start_flask():
+    """Start the Flask app with Gunicorn in async mode"""
+    options = {
+        'bind': '0.0.0.0:5000',
+        'workers': 2,  # Adjust based on your needs
+        'worker_class': 'gthread',  # Use threaded workers for async compatibility
+        'threads': 4,  # Number of threads per worker
+        'loglevel': 'info',
+        'accesslog': '-',  # Log to stdout
+        'errorlog': '-',   # Log to stdout
+        'timeout': 120,    # Increase timeout for Koyeb compatibility
+    }
+    gunicorn_app = StandaloneApplication(app, options)
+    
+    # Run Gunicorn in the main thread with asyncio
+    loop = asyncio.get_event_loop()
+    task = loop.run_in_executor(None, gunicorn_app.run)
+    return task
+
 async def main():
     """Main entry point"""
     setup_logging()
     logger = logging.getLogger(__name__)
-    
-    # Start Flask app in a separate thread
-    flask_thread = Thread(target=start_flask)
-    flask_thread.start()
     
     try:
         # Load and validate configuration
@@ -78,6 +81,9 @@ async def main():
         logger.info("Starting Telegram GitHub Release Uploader Bot...")
         logger.info(f"Target repository: {config.github_repo}")
         logger.info(f"Release tag: {config.github_release_tag}")
+        
+        # Start Flask app with Gunicorn
+        flask_task = await start_flask()
         
         # Start the bot
         bot = TelegramBot()
@@ -91,6 +97,15 @@ async def main():
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         sys.exit(1)
+    finally:
+        # Ensure Gunicorn shuts down gracefully
+        if 'flask_task' in locals():
+            flask_task.cancel()
+            await asyncio.sleep(1)  # Allow time for cleanup
 
 if __name__ == "__main__":
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     asyncio.run(main())
