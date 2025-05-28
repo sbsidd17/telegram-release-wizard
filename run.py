@@ -53,19 +53,24 @@ async def start_flask():
     """Start the Flask app with Gunicorn in async mode"""
     options = {
         'bind': '0.0.0.0:5000',
-        'workers': 2,  # Adjust based on your needs
-        'worker_class': 'gthread',  # Use threaded workers for async compatibility
-        'threads': 4,  # Number of threads per worker
+        'workers': 1,  # Reduced for Koyeb's resource constraints
+        'worker_class': 'gthread',  # Threaded workers for async compatibility
+        'threads': 2,  # Reduced for Koyeb's resource constraints
         'loglevel': 'info',
         'accesslog': '-',  # Log to stdout
         'errorlog': '-',   # Log to stdout
-        'timeout': 120,    # Increase timeout for Koyeb compatibility
+        'timeout': 120,    # Timeout for Koyeb compatibility
+        'graceful_timeout': 30,  # Allow time for connections to close
+        'keepalive': 5,  # Keep connections alive for health checks
+        'preload': True,  # Preload app to reduce startup time
     }
     gunicorn_app = StandaloneApplication(app, options)
     
     # Run Gunicorn in the main thread with asyncio
     loop = asyncio.get_event_loop()
     task = loop.run_in_executor(None, gunicorn_app.run)
+    # Wait briefly to ensure Gunicorn binds to port 5000
+    await asyncio.sleep(2)
     return task
 
 async def main():
