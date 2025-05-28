@@ -7,6 +7,7 @@ def hello_world():
 
 @app.route('/health')
 def health():
+    app.logger.debug("Health check endpoint called")
     return 'OK', 200
 
 if __name__ == "__main__":
