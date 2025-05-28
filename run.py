@@ -10,10 +10,35 @@ from bot import TelegramBot
 from config import BotConfig
 from threading import Thread
 from app import app
+import gunicorn.app.base
+from gunicorn import config
+from gunicorn.arbiter import Arbiter
+
+class StandaloneApplication(gunicorn.app.base.BaseApplication):
+    """Custom Gunicorn application"""
+    def __init__(self, app, options=None):
+        self.options = options or {}
+        self.application = app
+        super().__init__()
+
+    def load_config(self):
+        cfg = config.Config()
+        for key, value in self.options.items():
+            cfg.set(key.lower(), value)
+
+    def load(self):
+        return self.application
 
 def start_flask():
-    """Start the Flask app"""
-    app.run(host='0.0.0.0', port=5000)
+    """Start the Flask app with Gunicorn"""
+    options = {
+        'bind': '0.0.0.0:5000',
+        'workers': 2,  # Adjust based on your needs
+        'loglevel': 'info',
+        'accesslog': '-',  # Log to stdout
+        'errorlog': '-',   # Log to stdout
+    }
+    StandaloneApplication(app, options).run()
 
 def setup_logging():
     """Setup logging configuration"""
