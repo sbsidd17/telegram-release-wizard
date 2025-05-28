@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple runner script for the Telegram bot and Flask app.
+Simple runner script for the Telegram bot.
 """
 import asyncio
 import sys
@@ -8,13 +8,6 @@ import logging
 import signal
 from bot import TelegramBot
 from config import BotConfig
-from threading import Thread
-from app import app
-
-def start_flask():
-    """Start the Flask app using Gunicorn"""
-    # This function is not needed for Gunicorn; Gunicorn will handle this
-    pass
 
 def setup_logging():
     """Setup logging configuration"""
@@ -65,5 +58,4 @@ async def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    # Run the bot with Gunicorn, Flask will be handled by Gunicorn
     asyncio.run(main())
