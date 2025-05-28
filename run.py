@@ -41,33 +41,42 @@ def setup_logging():
     # Reduce noise from aiohttp and other libraries
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telethon').setLevel(logging.WARNING)
-    logging.getLogger('gunicorn').setLevel(logging.INFO)
+    logging.getLogger('gunicorn').setLevel(logging.DEBUG)  # Increased for debugging
 
 def signal_handler(signum, frame, loop, bot):
     """Handle shutdown signals gracefully"""
     logger = logging.getLogger(__name__)
     logger.info("Received shutdown signal, stopping bot...")
     
-    # Schedule cleanup tasks
+    # Cancel all tasks except the current one
     tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task()]
     for task in tasks:
         task.cancel()
     
-    # Stop the event loop
-    loop.stop()
+    # Schedule cleanup in the running loop
+    async def cleanup():
+        try:
+            await bot.client.disconnect()
+            await loop.shutdown_asyncgens()
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+    
+    # Run cleanup in the current loop
+    loop.create_task(cleanup())
     loop.run_until_complete(loop.shutdown_asyncgens())
-    loop.run_until_complete(bot.client.disconnect())
     loop.close()
     sys.exit(0)
 
 async def start_flask():
     """Start the Flask app with Gunicorn in async mode"""
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Gunicorn server...")
     options = {
         'bind': '0.0.0.0:5000',
         'workers': 1,  # Reduced for Koyeb's resource constraints
         'worker_class': 'gthread',  # Threaded workers for async compatibility
         'threads': 2,  # Reduced for Koyeb's resource constraints
-        'loglevel': 'info',
+        'loglevel': 'debug',  # Increased for debugging health check
         'accesslog': '-',  # Log to stdout
         'errorlog': '-',   # Log to stdout
         'timeout': 120,    # Timeout for Koyeb compatibility
@@ -80,8 +89,9 @@ async def start_flask():
     # Run Gunicorn in the main thread with asyncio
     loop = asyncio.get_event_loop()
     task = loop.run_in_executor(None, gunicorn_app.run)
-    # Wait briefly to ensure Gunicorn binds to port 5000
-    await asyncio.sleep(2)
+    # Wait to ensure Gunicorn binds to port 5000
+    await asyncio.sleep(5)  # Increased for reliability
+    logger.info("Gunicorn server started")
     return task
 
 async def main():
@@ -122,9 +132,15 @@ async def main():
             flask_task.cancel()
         # Properly disconnect Telegram client
         if 'bot' in locals():
-            await bot.client.disconnect()
+            try:
+                await bot.client.disconnect()
+            except Exception as e:
+                logger.error(f"Error disconnecting Telegram client: {e}")
         # Allow time for cleanup
-        await asyncio.sleep(1)
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
 
 if __name__ == "__main__":
     # Get the event loop
