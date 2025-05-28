@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+l#!/usr/bin/env python3
 """
 Simple runner script for the Telegram bot and Flask app.
 """
@@ -43,10 +43,21 @@ def setup_logging():
     logging.getLogger('telethon').setLevel(logging.WARNING)
     logging.getLogger('gunicorn').setLevel(logging.INFO)
 
-def signal_handler(signum, frame):
+def signal_handler(signum, frame, loop, bot):
     """Handle shutdown signals gracefully"""
     logger = logging.getLogger(__name__)
     logger.info("Received shutdown signal, stopping bot...")
+    
+    # Schedule cleanup tasks
+    tasks = [t for t in asyncio.all_tasks(loop) if t is not asyncio.current_task()]
+    for task in tasks:
+        task.cancel()
+    
+    # Stop the event loop
+    loop.stop()
+    loop.run_until_complete(loop.shutdown_asyncgens())
+    loop.run_until_complete(bot.client.disconnect())
+    loop.close()
     sys.exit(0)
 
 async def start_flask():
@@ -62,7 +73,7 @@ async def start_flask():
         'timeout': 120,    # Timeout for Koyeb compatibility
         'graceful_timeout': 30,  # Allow time for connections to close
         'keepalive': 5,  # Keep connections alive for health checks
-        'preload_app': True,  # Corrected from 'preload' to preload app before forking
+        'preload_app': True,  # Preload app to reduce startup time
     }
     gunicorn_app = StandaloneApplication(app, options)
     
@@ -77,6 +88,10 @@ async def main():
     """Main entry point"""
     setup_logging()
     logger = logging.getLogger(__name__)
+    loop = asyncio.get_event_loop()
+    
+    # Initialize bot early to pass to signal handler
+    bot = TelegramBot()
     
     try:
         # Load and validate configuration
@@ -91,7 +106,6 @@ async def main():
         flask_task = await start_flask()
         
         # Start the bot
-        bot = TelegramBot()
         await bot.start()
         
     except ValueError as e:
@@ -106,11 +120,24 @@ async def main():
         # Ensure Gunicorn shuts down gracefully
         if 'flask_task' in locals():
             flask_task.cancel()
-            await asyncio.sleep(1)  # Allow time for cleanup
+        # Properly disconnect Telegram client
+        if 'bot' in locals():
+            await bot.client.disconnect()
+        # Allow time for cleanup
+        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    # Set up signal handlers
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    # Get the event loop
+    loop = asyncio.get_event_loop()
     
-    asyncio.run(main())
+    # Initialize bot for signal handler
+    bot = TelegramBot()
+    
+    # Set up signal handlers
+    signal.signal(signal.SIGINT, lambda s, f: signal_handler(s, f, loop, bot))
+    signal.signal(signal.SIGTERM, lambda s, f: signal_handler(s, f, loop, bot))
+    
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
