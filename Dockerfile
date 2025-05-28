@@ -1,3 +1,5 @@
+# Update the Dockerfile to use Gunicorn
+
 FROM python:3.11-slim
 
 # Set working directory
@@ -24,5 +26,5 @@ RUN mkdir -p /app/sessions
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 USER botuser
 
-# Run the application
+# Run the application with Gunicorn
 CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
