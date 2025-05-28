@@ -80,7 +80,7 @@ def signal_handler(signum, frame, loop, bot):
 
 async def start_flask():
     """Start the Flask app with Gunicorn in async mode"""
-    logger = logging.getLogger(__main__)
+    logger = logging.getLogger(__name__)
     # Use Render's PORT env variable or default to 5000 for Koyeb
     port = int(os.environ.get("PORT", 5000))
     logger.info(f"Starting Gunicorn server on port {port}...")
@@ -110,7 +110,7 @@ async def start_flask():
 async def main():
     """Main entry point"""
     setup_logging()
-    logger = logging.getLogger(__main__)
+    logger = logging.getLogger(__name__)  # Fixed from __main__
     loop = asyncio.get_event_loop()
     
     # Initialize bot early to pass to signal handler
