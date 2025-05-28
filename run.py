@@ -6,6 +6,7 @@ import asyncio
 import sys
 import logging
 import signal
+import os
 from bot import TelegramBot
 from config import BotConfig
 from app import app
@@ -41,7 +42,7 @@ def setup_logging():
     # Reduce noise from aiohttp and other libraries
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telethon').setLevel(logging.WARNING)
-    logging.getLogger('gunicorn').setLevel(logging.DEBUG)  # Increased for debugging
+    logging.getLogger('gunicorn').setLevel(logging.DEBUG)  # Debug for port issues
 
 def signal_handler(signum, frame, loop, bot):
     """Handle shutdown signals gracefully"""
@@ -61,8 +62,14 @@ def signal_handler(signum, frame, loop, bot):
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
     
-    # Run cleanup in the current loop
-    loop.create_task(cleanup())
+    # Run cleanup without starting a new loop
+    try:
+        loop.run_until_complete(cleanup())
+    except RuntimeError as e:
+        logger.error(f"Error running cleanup: {e}")
+    
+    # Stop and close the loop
+    loop.stop()
     loop.run_until_complete(loop.shutdown_asyncgens())
     loop.close()
     sys.exit(0)
@@ -70,16 +77,18 @@ def signal_handler(signum, frame, loop, bot):
 async def start_flask():
     """Start the Flask app with Gunicorn in async mode"""
     logger = logging.getLogger(__name__)
-    logger.info("Starting Gunicorn server...")
+    # Use Render's PORT env variable or default to 5000 for Koyeb
+    port = int(os.environ.get("PORT", 5000))
+    logger.info(f"Starting Gunicorn server on port {port}...")
     options = {
-        'bind': '0.0.0.0:5000',
-        'workers': 1,  # Reduced for Koyeb's resource constraints
+        'bind': f'0.0.0.0:{port}',  # Dynamic port for Render compatibility
+        'workers': 1,  # Reduced for resource constraints
         'worker_class': 'gthread',  # Threaded workers for async compatibility
-        'threads': 2,  # Reduced for Koyeb's resource constraints
-        'loglevel': 'debug',  # Increased for debugging health check
+        'threads': 1,  # Reduced further for reliability
+        'loglevel': 'debug',  # Debug for port issues
         'accesslog': '-',  # Log to stdout
         'errorlog': '-',   # Log to stdout
-        'timeout': 120,    # Timeout for Koyeb compatibility
+        'timeout': 120,    # Timeout for health checks
         'graceful_timeout': 30,  # Allow time for connections to close
         'keepalive': 5,  # Keep connections alive for health checks
         'preload_app': True,  # Preload app to reduce startup time
@@ -89,9 +98,9 @@ async def start_flask():
     # Run Gunicorn in the main thread with asyncio
     loop = asyncio.get_event_loop()
     task = loop.run_in_executor(None, gunicorn_app.run)
-    # Wait to ensure Gunicorn binds to port 5000
-    await asyncio.sleep(5)  # Increased for reliability
-    logger.info("Gunicorn server started")
+    # Wait longer to ensure Gunicorn binds to port
+    await asyncio.sleep(10)  # Increased for reliability
+    logger.info(f"Gunicorn server started on port {port}")
     return task
 
 async def main():
