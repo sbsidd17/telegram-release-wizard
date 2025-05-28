@@ -1,13 +1,26 @@
-# Update the run.py file to use Gunicorn
-
 #!/usr/bin/env python3
 """
 Simple runner script for the Telegram bot and Flask app.
 """
+import asyncio
 import sys
 import logging
+import signal
+import subprocess
+import os
 from bot import TelegramBot
 from config import BotConfig
+from threading import Thread
+
+def start_flask():
+    """Start the Flask app using gunicorn"""
+    subprocess.run([
+        "gunicorn", 
+        "--bind", "0.0.0.0:5000",
+        "--workers", "1",
+        "--timeout", "120",
+        "app:app"
+    ])
 
 def setup_logging():
     """Setup logging configuration"""
@@ -24,10 +37,21 @@ def setup_logging():
     logging.getLogger('aiohttp').setLevel(logging.WARNING)
     logging.getLogger('telethon').setLevel(logging.WARNING)
 
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger = logging.getLogger(__name__)
+    logger.info("Received shutdown signal, stopping bot...")
+    sys.exit(0)
+
 async def main():
     """Main entry point"""
     setup_logging()
     logger = logging.getLogger(__name__)
+    
+    # Start Flask app with gunicorn in a separate thread
+    flask_thread = Thread(target=start_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
     
     try:
         # Load and validate configuration
@@ -52,8 +76,4 @@ async def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    # Gunicorn will handle running the app
-    import os
-    os.environ['GUNICORN_CMD_ARGS'] = '--bind=0.0.0.0:5000'
-    from gunicorn.app.wsgiapp import run
-    run()
+    asyncio.run(main())
