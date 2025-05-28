@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies, including Gunicorn
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
@@ -24,5 +24,5 @@ RUN mkdir -p /app/sessions
 RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 USER botuser
 
-# Command to run the application using Gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "run:app"]
+# Run the application
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
