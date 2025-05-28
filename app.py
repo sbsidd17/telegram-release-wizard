@@ -3,6 +3,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def hello_world():
+    app.logger.debug("Root endpoint called")
     return 'Free Storage Server Working'
 
 @app.route('/health')
