@@ -54,7 +54,7 @@ def signal_handler(signum, frame, loop, bot):
     for task in tasks:
         task.cancel()
     
-    # Schedule cleanup in the running loop
+    # Define cleanup coroutine
     async def cleanup():
         try:
             await bot.client.disconnect()
@@ -62,29 +62,33 @@ def signal_handler(signum, frame, loop, bot):
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
     
-    # Run cleanup without starting a new loop
+    # Run cleanup in the existing loop
     try:
-        loop.run_until_complete(cleanup())
+        future = asyncio.ensure_future(cleanup(), loop=loop)
+        loop.run_until_complete(future)
     except RuntimeError as e:
         logger.error(f"Error running cleanup: {e}")
     
     # Stop and close the loop
-    loop.stop()
-    loop.run_until_complete(loop.shutdown_asyncgens())
-    loop.close()
+    try:
+        loop.stop()
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
+    except Exception as e:
+        logger.error(f"Error closing loop: {e}")
     sys.exit(0)
 
 async def start_flask():
     """Start the Flask app with Gunicorn in async mode"""
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__main__)
     # Use Render's PORT env variable or default to 5000 for Koyeb
     port = int(os.environ.get("PORT", 5000))
     logger.info(f"Starting Gunicorn server on port {port}...")
     options = {
         'bind': f'0.0.0.0:{port}',  # Dynamic port for Render compatibility
-        'workers': 1,  # Reduced for resource constraints
+        'workers': 1,  # Minimal for resource constraints
         'worker_class': 'gthread',  # Threaded workers for async compatibility
-        'threads': 1,  # Reduced further for reliability
+        'threads': 1,  # Minimal for reliability
         'loglevel': 'debug',  # Debug for port issues
         'accesslog': '-',  # Log to stdout
         'errorlog': '-',   # Log to stdout
@@ -99,14 +103,14 @@ async def start_flask():
     loop = asyncio.get_event_loop()
     task = loop.run_in_executor(None, gunicorn_app.run)
     # Wait longer to ensure Gunicorn binds to port
-    await asyncio.sleep(10)  # Increased for reliability
+    await asyncio.sleep(15)  # Increased for reliability
     logger.info(f"Gunicorn server started on port {port}")
     return task
 
 async def main():
     """Main entry point"""
     setup_logging()
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger(__main__)
     loop = asyncio.get_event_loop()
     
     # Initialize bot early to pass to signal handler
